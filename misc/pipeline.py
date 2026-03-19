@@ -57,13 +57,14 @@ class InferenceConfig:
 
 class LMDeployRunner:
     MODELS = {
-        'qwen3-omni-30b': '/real_model_path',
-        'qwen3-vl-4b': '/real_model_path',
-        'qwen3-vl-30b': '/real_model_path',
-        'qwen3-30b': '/real_model_path',
-        'qwen3-8b': '/real_model_path',
         'qwen2.5-vl-7b': '/real_model_path',
-        'glm-4.1v-9b': '/real_model_path',
+        'qwen3-8b': '/real_model_path',
+        'qwen3-30b': '/real_model_path',
+        'qwen3-vl-4b': 'real_model_path',
+        'qwen3-vl-30b': 'real_model_path',
+        'qwen3-omni-30b': 'real_model_path',
+        'qwen35-4b': 'real_model_path',
+        'glm-4.1v-9b': 'real_model_path',
     }
 
     def __init__(self, backend='pt', model_name='qwen3-vl-4b', model_path=None, tp=1, cuda_devices='6,7', config=None):

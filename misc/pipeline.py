@@ -241,7 +241,8 @@ def run_test(runner: LMDeployRunner, test_id: int):
     tc = TEST_CASES[test_id]
     print(f"\n{'='*50}\nTEST {test_id}: {tc.name}\n{'='*50}")
     messages = MESSAGE_BUILDERS[tc.modality](**tc.kwargs)
-    print(runner.run(messages, **tc.run_kwargs))
+    print(f'\n{runner.run(messages, **tc.run_kwargs)}')
+    print(f'\n{"="*50}\nTest End {test_id}: {tc.name}\n{"="*50}')
 
 
 def main():
@@ -257,10 +258,10 @@ def main():
     parser.add_argument('--tp', type=int, default=1)
     parser.add_argument('--cuda', default='6,7')
     parser.add_argument('--temp', type=float, default=0.0)
-    parser.add_argument('--max-tokens', type=int, default=50)
-    parser.add_argument('--log-level', default='INFO')
-    parser.add_argument('--eager-mode', default=False, action='store_true')
-    parser.add_argument('--routed-experts', default=False, action='store_true')
+    parser.add_argument('--tokens', type=int, default=50)
+    parser.add_argument('--log', default='INFO')
+    parser.add_argument('--eager', default=False, action='store_true')
+    parser.add_argument('--r3', default=False, action='store_true')
     args = parser.parse_args()
 
     test_ids = (list(TEST_CASES.keys())
@@ -272,10 +273,10 @@ def main():
 
     config = InferenceConfig(
         temperature=args.temp,
-        max_new_tokens=args.max_tokens,
-        log_level=args.log_level,
-        eager_mode=args.eager_mode,
-        return_routed_experts=args.routed_experts,
+        max_new_tokens=args.tokens,
+        log_level=args.log,
+        eager_mode=args.eager,
+        return_routed_experts=args.r3,
     )
     runner = LMDeployRunner(backend=args.backend,
                             model_name=args.model,
@@ -289,7 +290,7 @@ def main():
 if __name__ == '__main__':
     main()
 """
-python 0_pipe.py 2 --model qwen3-omni-30b --cuda 6 --tp 1
-python 0_pipe.py 2 --model qwen3-vl-4b --cuda 7 --tp 1
-python 0_pipe.py 0 --model qwen3-30b --cuda 7 --tp 1
+python 0_pipe.py --model qwen3-omni-30b --cuda 6 --tp 1 2
+python 0_pipe.py --model qwen3-vl-4b --cuda 7 --tp 1 2
+python 0_pipe.py --model qwen3-30b --cuda 7 --tp 1 0
 """

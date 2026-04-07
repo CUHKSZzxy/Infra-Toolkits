@@ -3,11 +3,12 @@ import argparse
 import os
 import re
 import sys
-from dataclasses import dataclass
-from enum import Enum
-from typing import Callable, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List
 
 from lmdeploy import GenerationConfig, PytorchEngineConfig, TurbomindEngineConfig, pipeline
+
+# ── Output filter ──────────────────────────────────────────────────────────────
 
 
 class RayPrefixFilter:
@@ -37,15 +38,7 @@ class RayPrefixFilter:
 sys.stdout = RayPrefixFilter(sys.stdout)
 sys.stderr = RayPrefixFilter(sys.stderr)
 
-
-class InputType(Enum):
-    TEXT = 0
-    IMAGE = 1
-    VIDEO = 2
-    AUDIO = 3
-    MULTI_IMAGE = 4
-    MULTI_VIDEO = 5
-    TIME_SERIES = 6
+# ── Config & runner ────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -53,18 +46,25 @@ class InferenceConfig:
     temperature: float = 0.0
     max_new_tokens: int = 128
     log_level: str = 'INFO'
+    eager_mode: bool = False
+    return_routed_experts: bool = False
 
 
 class LMDeployRunner:
     MODELS = {
         'qwen2.5-vl-7b': '/real_model_path',
         'qwen3-8b': '/real_model_path',
+        'qwen3-8b-fp8': '/real_model_path',
         'qwen3-30b': '/real_model_path',
-        'qwen3-vl-4b': 'real_model_path',
-        'qwen3-vl-30b': 'real_model_path',
-        'qwen3-omni-30b': 'real_model_path',
-        'qwen35-4b': 'real_model_path',
-        'glm-4.1v-9b': 'real_model_path',
+        'qwen3-vl-4b': '/real_model_path',
+        'qwen3-vl-30b': '/real_model_path',
+        'qwen3-omni-30b': '/real_model_path',
+        'qwen35-4b': '/real_model_path',
+        'qwen35-35b': '/real_model_path',
+        'glm-4.1v-9b': '/real_model_path',
+        'interns1-mini': '/real_model_path',
+        'internvl3-8b': '/real_model_path',
+        'internvl35-8b': '/real_model_path',
     }
 
     def __init__(self, backend='pt', model_name='qwen3-vl-4b', model_path=None, tp=1, cuda_devices='6,7', config=None):
@@ -76,212 +76,216 @@ class LMDeployRunner:
         self.model_path = model_path or self.MODELS.get(model_name, model_name)
 
         if backend == 'pt':
-            backend_config = PytorchEngineConfig(tp=tp)
-            # backend_config = PytorchEngineConfig(tp=tp, eager_mode=True)
-            # backend_config = PytorchEngineConfig(tp=tp, session_len=32768)
+            pt_kwargs = dict(tp=tp)
+            if self.config.eager_mode:
+                pt_kwargs['eager_mode'] = True
+            if self.config.return_routed_experts:
+                pt_kwargs['enable_return_routed_experts'] = True
+            backend_config = PytorchEngineConfig(**pt_kwargs)
         elif backend == 'tm':
             backend_config = TurbomindEngineConfig(tp=tp)
 
         self.pipe = pipeline(self.model_path, backend_config=backend_config, log_level=self.config.log_level)
         print(f'\n{"="*50}')
-        print(f'Model loaded: {model_name} (TP={tp})')
-        print(f'Gen config: temperature={self.config.temperature}, max_new_tokens={self.config.max_new_tokens}')
+        print(f'Model: {model_name}  TP={tp}  temp={self.config.temperature}  max_tokens={self.config.max_new_tokens}')
         print(f'{"="*50}')
 
-    def run(self, messages: List[Dict]) -> str:
-        gen_config = GenerationConfig(temperature=self.config.temperature, max_new_tokens=self.config.max_new_tokens)
-        response = self.pipe(messages, gen_config=gen_config)
-        # return response.text if hasattr(response, 'text') else str(response)
-        return response
+    def run(self, messages: List[Dict], **run_kwargs):
+        gen_kwargs = dict(temperature=self.config.temperature, max_new_tokens=self.config.max_new_tokens)
+        if self.config.return_routed_experts:
+            gen_kwargs['return_routed_experts'] = True
+        gen_config = GenerationConfig(**gen_kwargs)
+        return self.pipe(messages, gen_config=gen_config, **run_kwargs)
 
 
-class MessageBuilder:
-
-    @staticmethod
-    def text(prompt: str) -> List[Dict]:
-        return [{'role': 'user', 'content': [{'type': 'text', 'text': prompt}]}]
-
-    @staticmethod
-    def image(url: str, prompt: str = 'Describe this image') -> List[Dict]:
-        return [{
-            'role': 'user',
-            'content': [{
-                'type': 'image_url',
-                'image_url': {
-                    'url': url
-                }
-            }, {
-                'type': 'text',
-                'text': prompt
-            }]
-        }]
-
-    @staticmethod
-    def multi_image(urls: List[str], prompt: str = 'Describe these images') -> List[Dict]:
-        content = [{'type': 'image_url', 'image_url': {'url': url}} for url in urls]
-        content.append({'type': 'text', 'text': prompt})
-        return [{'role': 'user', 'content': content}]
-
-    @staticmethod
-    def video(url: str, prompt: str = 'Describe this video') -> List[Dict]:
-        return [{
-            'role': 'user',
-            'content': [{
-                'type': 'video_url',
-                'video_url': {
-                    'url': url
-                }
-            }, {
-                'type': 'text',
-                'text': prompt
-            }]
-        }]
-
-    @staticmethod
-    def multi_video(urls: List[str], prompt: str = 'Describe these videos') -> List[Dict]:
-        content = [{'type': 'video_url', 'video_url': {'url': url}} for url in urls]
-        content.append({'type': 'text', 'text': prompt})
-        return [{'role': 'user', 'content': content}]
-
-    @staticmethod
-    def audio(url: str, prompt: str = 'Describe this audio') -> List[Dict]:
-        return [{
-            'role': 'user',
-            'content': [{
-                'type': 'audio_url',
-                'audio_url': {
-                    'url': url
-                }
-            }, {
-                'type': 'text',
-                'text': prompt
-            }]
-        }]
-
-    @staticmethod
-    def time_series(url: str, sampling_rate: int, prompt: Optional[str] = None) -> List[Dict]:
-        default = ('Please determine whether an Earthquake event has occurred. '
-                   'If so, specify P-wave and S-wave starting indices.')
-        return [{
-            'role':
-            'user',
-            'content': [{
-                'type': 'text',
-                'text': prompt or default
-            }, {
-                'type': 'time_series',
-                'time_series_url': {
-                    'url': url,
-                    'sampling_rate': sampling_rate
-                }
-            }]
-        }]
+# ── Message builders ───────────────────────────────────────────────────────────
 
 
-BUILDERS: Dict[InputType, Callable] = {
-    InputType.TEXT: MessageBuilder.text,
-    InputType.IMAGE: MessageBuilder.image,
-    InputType.VIDEO: MessageBuilder.video,
-    InputType.AUDIO: MessageBuilder.audio,
-    InputType.MULTI_IMAGE: MessageBuilder.multi_image,
-    InputType.MULTI_VIDEO: MessageBuilder.multi_video,
-    InputType.TIME_SERIES: MessageBuilder.time_series,
+def _user_msg(content: list) -> List[Dict]:
+    final_message = [{'role': 'user', 'content': content}]
+    print(f'Input message:\n{final_message}\n')
+    return final_message
+
+
+def _media(media_type: str, urls, prompt: str) -> List[Dict]:
+    """Unified builder for single/multi image, video, or audio messages."""
+    key = f'{media_type}_url'
+    url_list = urls if isinstance(urls, list) else [urls]
+    items = [{'type': key, key: {'url': u}} for u in url_list]
+    return _user_msg(items + [{'type': 'text', 'text': prompt}])
+
+
+MESSAGE_BUILDERS = {
+    'text':
+    lambda prompt: _user_msg([{
+        'type': 'text',
+        'text': prompt
+    }]),
+    'image':
+    lambda url, prompt='Describe this image': _media('image', url, prompt),
+    'multi_image':
+    lambda urls, prompt='Describe these images': _media('image', urls, prompt),
+    'video':
+    lambda url, prompt='Describe this video': _media('video', url, prompt),
+    'multi_video':
+    lambda urls, prompt='Describe these videos': _media('video', urls, prompt),
+    'audio':
+    lambda url, prompt='Describe this audio': _media('audio', url, prompt),
+    'multi_audio':
+    lambda urls, prompt='Describe these audios': _media('audio', urls, prompt),
+    'time_series':
+    lambda url, sampling_rate, prompt=None: _user_msg([
+        {
+            'type':
+            'text',
+            'text':
+            prompt or ('Please determine whether an Earthquake event has occurred. '
+                       'If so, specify P-wave and S-wave starting indices.')
+        },
+        {
+            'type': 'time_series',
+            'time_series_url': {
+                'url': url,
+                'sampling_rate': sampling_rate
+            }
+        },
+    ]),
 }
 
-TEST_CASES = {
-    0: ('Text', InputType.TEXT, {
-        'prompt': 'Who are you?'
-    }),
-    1: ('Single Image', InputType.IMAGE, {
-        'url': 'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
-        'prompt': 'Describe this image'
-    }),
-    2: (
-        'Single Video',
-        InputType.VIDEO,
-        {
-            # 'url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/space_woaudio.mp4',
-            'url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/clip_3_removed.mp4',
-            # "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-VL/space_woaudio.mp4",
-            # "url": "https://raw.githubusercontent.com/CUHKSZzxy/Online-Data/main/clip_3_removed.mp4",
-            'prompt': 'Describe this video'
+# ── Test cases ─────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class TestCase:
+    name: str
+    modality: str  # key into MESSAGE_BUILDERS
+    kwargs: dict  # passed to the builder
+    run_kwargs: dict = field(default_factory=dict)
+    # run_kwargs = {
+    #     'media_io_kwargs': {
+    #         'video': {
+    #             'fps': 2,
+    #             'num_frames': 10,
+    #         },
+    #         'mm_processor_kwargs': {
+    #             'min_pixels': 4 * 32 * 32,
+    #             'max_pixels': 256 * 32 * 32,
+    #         }
+    #     }
+    # }
+
+
+TEST_CASES: Dict[int, TestCase] = {
+    0:
+    TestCase('Text', 'text', {'prompt': 'Who are you?'}),
+    1:
+    TestCase(
+        'Single Image', 'image', {
+            'url': 'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
+            'prompt': 'Describe this image',
         }),
-    3: (
-        'Single Audio',
-        InputType.AUDIO,
-        {
-            'url': 'file:///nvme1/zhouxinyu/lmdeploy_vl/cough.wav',
-            # 'url': 'https://raw.githubusercontent.com/CUHKSZzxy/Online-Data/main/cough.wav',
-            'prompt': 'Describe this audio'
+    2:
+    TestCase('Single Video', 'video', {
+        'url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/clip_3_removed.mp4',
+        'prompt': 'Describe this video',
+    }),
+    3:
+    TestCase('Single Audio', 'audio', {
+        'url': 'file:///nvme1/zhouxinyu/lmdeploy_vl/cough.wav',
+        'prompt': 'Describe this audio',
+    }),
+    4:
+    TestCase(
+        'Multi Image', 'multi_image', {
+            'urls': [
+                'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
+                'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
+            ],
+            'prompt':
+            'Compare these two images. What are the similarities and differences?',
         }),
-    4: ('Multi Image', InputType.MULTI_IMAGE, {
-        'urls': [
-            'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
-            'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg'
-        ],
-        'prompt':
-        'Compare these two images. What are the similarities and differences?'
-    }),
-    5: ('Multi Video', InputType.MULTI_VIDEO, {
-        'urls': [
-            'file:///nvme1/zhouxinyu/lmdeploy_fp8/space_woaudio.mp4',
-            'file:///nvme1/zhouxinyu/lmdeploy_fp8/space_woaudio.mp4'
-        ],
-        'prompt':
-        'Compare these two videos. What are the similarities and differences?'
-    }),
-    6: ('Time Series', InputType.TIME_SERIES, {
+    5:
+    TestCase(
+        'Multi Video', 'multi_video', {
+            'urls': [
+                'file:///nvme1/zhouxinyu/lmdeploy_fp8/space_woaudio.mp4',
+                'file:///nvme1/zhouxinyu/lmdeploy_fp8/space_woaudio.mp4',
+            ],
+            'prompt':
+            'Compare these two videos. What are the similarities and differences?',
+        }),
+    6:
+    TestCase(
+        'Multi Audio', 'multi_audio', {
+            'urls': [
+                'file:///nvme1/zhouxinyu/lmdeploy_vl/cough.wav',
+                'file:///nvme1/zhouxinyu/lmdeploy_vl/cough.wav',
+            ],
+            'prompt': 'Compare these two audios. What are the similarities and differences?',
+        }),
+    7:
+    TestCase('Time Series', 'time_series', {
         'url': 'https://raw.githubusercontent.com/CUHKSZzxy/Online-Data/main/0092638_seism.npy',
-        'sampling_rate': 100
+        'sampling_rate': 100,
     }),
 }
+
+# ── Entry point ────────────────────────────────────────────────────────────────
 
 
 def run_test(runner: LMDeployRunner, test_id: int):
-    name, input_type, kwargs = TEST_CASES[test_id]
-    print(f"\n{'='*50}")
-    print(f'TEST {test_id}: {name}')
-    print('=' * 50)
-
-    builder = BUILDERS[input_type]
-    messages = builder(**kwargs)
-    print(runner.run(messages))
+    tc = TEST_CASES[test_id]
+    print(f"\n{'='*50}\nTEST {test_id}: {tc.name}\n{'='*50}")
+    messages = MESSAGE_BUILDERS[tc.modality](**tc.kwargs)
+    print(runner.run(messages, **tc.run_kwargs))
 
 
 def main():
     parser = argparse.ArgumentParser(description='LMDeploy Inference')
-    parser.add_argument('tests', nargs='*', default=['0'], help='Test IDs (0-5) or "all"')
-    parser.add_argument('--backend', default='pt', help='Inference backend (pytorch or turbomind)')
-    parser.add_argument('--model', default='qwen3-vl-4b', help='Model name or path')
-    parser.add_argument('--tp', type=int, default=1, help='Tensor parallelism')
-    parser.add_argument('--cuda', default='6,7', help='CUDA devices')
-    parser.add_argument('--temp', type=float, default=0.0, help='temperature')
-    parser.add_argument('--max-tokens', type=int, default=50, help='Max new tokens')
-    parser.add_argument('--log-level', default='INFO', help='Logging level')
+    parser.add_argument('tests',
+                        nargs='*',
+                        default=['0'],
+                        help=f'Test IDs or "all". Available: {list(TEST_CASES.keys())}')
+    parser.add_argument('--backend', default='pt', choices=['pt', 'tm'])
+    parser.add_argument('--model',
+                        default='qwen3-vl-4b',
+                        help=f'Model alias or path. Aliases: {list(LMDeployRunner.MODELS.keys())}')
+    parser.add_argument('--tp', type=int, default=1)
+    parser.add_argument('--cuda', default='6,7')
+    parser.add_argument('--temp', type=float, default=0.0)
+    parser.add_argument('--max-tokens', type=int, default=50)
+    parser.add_argument('--log-level', default='INFO')
+    parser.add_argument('--eager-mode', default=False, action='store_true')
+    parser.add_argument('--routed-experts', default=False, action='store_true')
     args = parser.parse_args()
 
-    # NOTE: test cases
-    # 0: Text, 1: Single Image, 2: Single Video, 3: Single Audio
-    # 4: Multi Image, 5: Multi Video, 6: Time Series
-    if 'all' in args.tests:
-        test_ids = list(TEST_CASES.keys())
-    else:
-        test_ids = sorted(set(int(t) for t in args.tests if t.isdigit() and int(t) in TEST_CASES))
-
+    test_ids = (list(TEST_CASES.keys())
+                if 'all' in args.tests else sorted({int(t)
+                                                    for t in args.tests if t.isdigit() and int(t) in TEST_CASES}))
     if not test_ids:
         print(f'No valid tests. Available: {list(TEST_CASES.keys())}')
         return
 
-    config = InferenceConfig(temperature=args.temp, max_new_tokens=args.max_tokens, log_level=args.log_level)
+    config = InferenceConfig(
+        temperature=args.temp,
+        max_new_tokens=args.max_tokens,
+        log_level=args.log_level,
+        eager_mode=args.eager_mode,
+        return_routed_experts=args.routed_experts,
+    )
     runner = LMDeployRunner(backend=args.backend,
                             model_name=args.model,
                             tp=args.tp,
                             cuda_devices=args.cuda,
                             config=config)
-
     for tid in test_ids:
         run_test(runner, tid)
 
 
 if __name__ == '__main__':
     main()
+"""
+python 0_pipe.py 2 --model qwen3-omni-30b --cuda 6 --tp 1
+python 0_pipe.py 2 --model qwen3-vl-4b --cuda 7 --tp 1
+python 0_pipe.py 0 --model qwen3-30b --cuda 7 --tp 1
+"""

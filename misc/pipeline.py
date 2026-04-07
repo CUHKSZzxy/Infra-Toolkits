@@ -133,21 +133,23 @@ MESSAGE_BUILDERS = {
     lambda url, prompt='Describe this audio': _media('audio', url, prompt),
     'multi_audio':
     lambda urls, prompt='Describe these audios': _media('audio', urls, prompt),
-    'time_series':
-    lambda url, sampling_rate, prompt=None: _user_msg([
+    'mixed_image_video':
+    lambda image_url, video_url, prompt='Describe this image and video': _user_msg([
         {
-            'type':
-            'text',
-            'text':
-            prompt or ('Please determine whether an Earthquake event has occurred. '
-                       'If so, specify P-wave and S-wave starting indices.')
+            'type': 'image_url',
+            'image_url': {
+                'url': image_url
+            }
         },
         {
-            'type': 'time_series',
-            'time_series_url': {
-                'url': url,
-                'sampling_rate': sampling_rate
+            'type': 'video_url',
+            'video_url': {
+                'url': video_url
             }
+        },
+        {
+            'type': 'text',
+            'text': prompt
         },
     ]),
 }
@@ -182,17 +184,17 @@ TEST_CASES: Dict[int, TestCase] = {
     TestCase(
         'Single Image', 'image', {
             'url': 'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
-            'prompt': 'Describe this image',
+            'prompt': 'Describe this image.',
         }),
     2:
     TestCase('Single Video', 'video', {
         'url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/clip_3_removed.mp4',
-        'prompt': 'Describe this video',
+        'prompt': 'Describe this video.',
     }),
     3:
     TestCase('Single Audio', 'audio', {
         'url': 'file:///nvme1/zhouxinyu/lmdeploy_vl/cough.wav',
-        'prompt': 'Describe this audio',
+        'prompt': 'Describe this audio.',
     }),
     4:
     TestCase(
@@ -224,10 +226,12 @@ TEST_CASES: Dict[int, TestCase] = {
             'prompt': 'Compare these two audios. What are the similarities and differences?',
         }),
     7:
-    TestCase('Time Series', 'time_series', {
-        'url': 'https://raw.githubusercontent.com/CUHKSZzxy/Online-Data/main/0092638_seism.npy',
-        'sampling_rate': 100,
-    }),
+    TestCase(
+        'Mixed Image+Video', 'mixed_image_video', {
+            'image_url': 'https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg',
+            'video_url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/clip_3_removed.mp4',
+            'prompt': 'Describe both the image and the video.',
+        }),
 }
 
 # ── Entry point ────────────────────────────────────────────────────────────────

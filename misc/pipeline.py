@@ -152,6 +152,23 @@ MESSAGE_BUILDERS = {
             'text': prompt
         },
     ]),
+    'time_series':
+    lambda url, sampling_rate, prompt=None: _user_msg([
+        {
+            'type':
+            'text',
+            'text':
+            prompt or ('Please determine whether an Earthquake event has occurred. '
+                       'If so, specify P-wave and S-wave starting indices.')
+        },
+        {
+            'type': 'time_series_url',
+            'time_series_url': {
+                'url': url,
+                'sampling_rate': sampling_rate
+            }
+        },
+    ]),
 }
 
 # ── Test cases ─────────────────────────────────────────────────────────────────
@@ -232,6 +249,11 @@ TEST_CASES: Dict[int, TestCase] = {
             'video_url': 'file:///nvme1/zhouxinyu/lmdeploy_fp8/clip_3_removed.mp4',
             'prompt': 'Describe both the image and the video.',
         }),
+    8:
+    TestCase('Time Series', 'time_series', {
+        'url': 'https://raw.githubusercontent.com/CUHKSZzxy/Online-Data/main/0092638_seism.npy',
+        'sampling_rate': 100,
+    }),
 }
 
 # ── Entry point ────────────────────────────────────────────────────────────────

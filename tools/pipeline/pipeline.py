@@ -195,13 +195,13 @@ def main():
 if __name__ == '__main__':
     main()
 """
-python misc/pipeline.py --model qwen3-omni-30b --cuda 6 --tp 1 2
-python misc/pipeline.py --model qwen3-vl-4b --cuda 7 --tp 1 2
-python misc/pipeline.py --model qwen3-30b --cuda 7 --tp 1 0
-python misc/pipeline.py --model qwen35-4b --cuda 7 --tp 1 2
-python misc/pipeline.py --model glm-4.1v-9b --cuda 7 --tp 1 1 --thinking on
-python misc/pipeline.py --model interns1-pro --cuda 7 --tp 1 8 --thinking unset
-python misc/pipeline.py --model internvl3-8b-hf --cuda 7 --tp 1 1
-python misc/pipeline.py --model internvl3-1b --cuda 7 --tp 1 1
-python misc/pipeline.py --model interns2 --cuda 5 --tp 1 8 --video-fps 2 --video-frames 10
+python pipeline.py --model qwen3-omni-30b --cuda 6 --tp 1 2
+python pipeline.py --model qwen3-vl-4b --cuda 7 --tp 1 2
+python pipeline.py --model qwen3-30b --cuda 7 --tp 1 0
+python pipeline.py --model qwen35-4b --cuda 7 --tp 1 2
+python pipeline.py --model glm-4.1v-9b --cuda 7 --tp 1 1 --thinking on
+python pipeline.py --model interns1-pro --cuda 7 --tp 1 8 --thinking unset
+python pipeline.py --model internvl3-8b-hf --cuda 7 --tp 1 1
+python pipeline.py --model internvl3-1b --cuda 7 --tp 1 1
+python pipeline.py --model interns2 --cuda 5 --tp 1 8 --video-fps 2 --video-frames 10
 """

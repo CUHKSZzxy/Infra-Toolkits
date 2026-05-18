@@ -7,6 +7,9 @@ import sys
 from dataclasses import dataclass
 from typing import Dict, List
 
+if os.path.isdir(os.path.join(os.getcwd(), 'lmdeploy')):
+    sys.path.insert(0, os.getcwd())
+
 from lmdeploy import GenerationConfig, PytorchEngineConfig, TurbomindEngineConfig, pipeline
 from pipeline_config import MESSAGE_BUILDERS, MODEL_PATHS, TEST_CASES
 
@@ -47,6 +50,7 @@ class InferenceConfig:
     eager_mode: bool = False
     return_routed_experts: bool = False
     max_batch_size: int = 10
+    quant_policy: int = 0
 
 
 class LMDeployRunner:
@@ -81,6 +85,9 @@ class LMDeployRunner:
             kwargs['eager_mode'] = True
         if self.config.return_routed_experts:
             kwargs['enable_return_routed_experts'] = True
+        if self.config.quant_policy:
+            from lmdeploy.messages import QuantPolicy
+            kwargs['quant_policy'] = QuantPolicy(self.config.quant_policy)
         return PytorchEngineConfig(**kwargs)
 
     def run(self, messages: List[Dict], **run_kwargs):
@@ -159,6 +166,11 @@ def parse_args():
     parser.add_argument('--video-frames', type=int, default=None)
     parser.add_argument('--min-pixels', type=int, default=None)
     parser.add_argument('--max-pixels', type=int, default=None)
+    quant_aliases = {'none': 0, 'int4': 4, 'int8': 8, 'fp8': 16, 'turbo_quant': 42}
+    parser.add_argument('--quant-policy',
+                        default=0,
+                        type=lambda x: quant_aliases[x.lower()] if x.lower() in quant_aliases else int(x),
+                        help='KV cache quant policy: none/int4/int8/fp8/turbo_quant (or 0/4/8/16/42)')
     return parser.parse_args()
 
 
@@ -182,6 +194,7 @@ def main():
         eager_mode=args.eager,
         return_routed_experts=args.r3,
         max_batch_size=args.max_batch_size,
+        quant_policy=args.quant_policy,
     )
     runner = LMDeployRunner(backend=args.backend,
                             model_name=args.model,
@@ -204,4 +217,9 @@ python pipeline.py --model interns1-pro --cuda 7 --tp 1 8 --thinking unset
 python pipeline.py --model internvl3-8b-hf --cuda 7 --tp 1 1
 python pipeline.py --model internvl3-1b --cuda 7 --tp 1 1
 python pipeline.py --model interns2 --cuda 5 --tp 1 8 --video-fps 2 --video-frames 10
+
+# FP8 KV cache checks:
+python pipeline.py --model qwen3-8b --cuda 7 --tp 1 --quant-policy fp8 0
+python pipeline.py --model qwen35-4b --cuda 7 --tp 1 --quant-policy fp8 0
+python pipeline.py --model qwen35-35b --cuda 7 --tp 1 --quant-policy fp8 0
 """

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 from lmdeploy import GenerationConfig, PytorchEngineConfig, TurbomindEngineConfig, pipeline
-from pipe_cases import MESSAGE_BUILDERS, MODEL_PATHS, TEST_CASES
+from pipeline_config import MESSAGE_BUILDERS, MODEL_PATHS, TEST_CASES
 
 
 class RayPrefixFilter:

@@ -153,7 +153,7 @@ def parse_args():
     parser.add_argument('--tp', type=int, default=1)
     parser.add_argument('--cuda', default='6,7')
     parser.add_argument('--temp', type=float, default=0.0)
-    parser.add_argument('--tokens', type=int, default=50)
+    parser.add_argument('--max-tokens', type=int, default=50)
     parser.add_argument('--log', default='INFO')
     parser.add_argument('--max-batch-size', type=int, default=10)
     parser.add_argument('--eager', default=False, action='store_true')
@@ -189,7 +189,7 @@ def main():
 
     config = InferenceConfig(
         temperature=args.temp,
-        max_new_tokens=args.tokens,
+        max_new_tokens=args.max_tokens,
         log_level=args.log,
         eager_mode=args.eager,
         return_routed_experts=args.r3,

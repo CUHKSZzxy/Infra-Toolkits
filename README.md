@@ -15,7 +15,7 @@ Infra-Toolkits/
 ├── data/                     # Small local sample assets used by examples
 ├── debug/                    # NCCL, Ray log, tensor, NaN/Inf, and profile helpers
 ├── docker/                   # Docker build/run snippets
-├── download/                 # Hugging Face, VS Code, and offline CLI helpers
+├── download/                 # Hugging Face, VS Code, and CLI install helpers
 ├── model/                    # Model-file manipulation helpers
 ├── notes/                    # Investigation notes and captured outputs
 ├── pipeline/                 # LMDeploy pipeline runners and reusable cases
@@ -45,6 +45,8 @@ Infra-Toolkits/
 | Run LMDeploy with profiler env vars                        | `debug/profile.py`                                                                                 | Edit output path, then `python debug/profile.py`                                                   |
 | Download Hugging Face models or metadata                   | `download/hf_download.sh`, `download/hf_partial_download.py`                                       | `bash download/hf_download.sh`                                                                     |
 | Prepare offline VS Code server files                       | `download/offline_download_vscode.sh`                                                              | `bash download/offline_download_vscode.sh`                                                         |
+| Install Codex CLI online from npm                          | `download/install_codex_online.sh`                                                                 | `bash download/install_codex_online.sh --node-bin-dir ~/.nvm/versions/node/v24.15.0/bin`           |
+| Install Claude Code online from npm                        | `download/install_claude_code_online.sh`                                                           | `bash download/install_claude_code_online.sh --node-bin-dir ~/.nvm/versions/node/v24.15.0/bin`     |
 | Prepare or install an offline Codex CLI bundle             | `download/prepare_codex_offline_bundle.sh`, `download/install_codex_offline_bundle.sh`             | `bash download/install_codex_offline_bundle.sh --bundle codex-cli-offline-bundle-*.tar.gz`         |
 | Prepare or install an offline Claude Code CLI bundle       | `download/prepare_claude_code_offline_bundle.sh`, `download/install_claude_code_offline_bundle.sh` | `bash download/install_claude_code_offline_bundle.sh --bundle claude-code-offline-bundle-*.tar.gz` |
 | Build or start Docker containers                           | `docker/build_docker_image.sh`, `docker/start_docker.sh`                                           | Edit image/volume values, then run with `bash`                                                     |

@@ -6,6 +6,7 @@ BUNDLE=""
 SOURCE_DIR=""
 UPDATE_PROFILE=1
 PROFILE_PATH=""
+CODEX_HOME_DIR="${CODEX_HOME:-}"
 
 usage() {
   cat <<'EOF'
@@ -19,6 +20,8 @@ Options:
   --bundle PATH       Install from a codex-cli-offline-bundle-*.tar.gz file.
   --source-dir DIR    Install from an already extracted bundle directory.
   --install-root DIR  Install root. Default: ~/.local/codex-offline
+  --codex-home DIR    Optional CODEX_HOME to write into your profile.
+                      Default Codex home is ~/.codex.
   --profile PATH      Shell profile to update. Default: ~/.zshrc or ~/.bashrc.
   --no-profile        Do not update a shell profile; print the export instead.
   -h, --help          Show this help.
@@ -87,6 +90,13 @@ choose_profile() {
   esac
 }
 
+profile_exports() {
+  printf 'export PATH="%s:$PATH"\n' "$shim_dir"
+  if [[ -n "$CODEX_HOME_DIR" ]]; then
+    printf 'export CODEX_HOME="%s"\n' "$CODEX_HOME_DIR"
+  fi
+}
+
 find_first() {
   local root="$1"
   local pattern="$2"
@@ -108,6 +118,11 @@ while [[ $# -gt 0 ]]; do
     --install-root)
       [[ $# -ge 2 ]] || die "--install-root requires a value"
       INSTALL_ROOT="$2"
+      shift 2
+      ;;
+    --codex-home)
+      [[ $# -ge 2 ]] || die "--codex-home requires a value"
+      CODEX_HOME_DIR="$2"
       shift 2
       ;;
     --profile)
@@ -245,7 +260,7 @@ chmod +x "$shim"
 
 ln -sfn "$release_dir" "$INSTALL_ROOT/current"
 
-profile_export="export PATH=\"$shim_dir:\$PATH\""
+profile_export="$(profile_exports)"
 if [[ "$UPDATE_PROFILE" -eq 1 ]]; then
   profile="$(choose_profile)"
   marker_begin="# >>> codex offline install >>>"
@@ -265,14 +280,23 @@ EOF
   fi
 else
   say "profile update skipped; run this in your shell:"
-  say "  $profile_export"
+  printf '%s\n' "$profile_export" | sed 's/^/[install]   /'
 fi
 
-say "verifying Codex"
-PATH="$shim_dir:$PATH" "$shim" --version
+codex_home="${CODEX_HOME_DIR:-$HOME/.codex}"
+mkdir -p "$codex_home/skills"
 
+say "verifying Codex"
+CODEX_HOME="$codex_home" PATH="$shim_dir:$PATH" "$shim" --version
+
+say "Codex home: $codex_home"
+say "config file: $codex_home/config.toml"
+say "skills dir: $codex_home/skills/<skill-name>/SKILL.md"
 say "done"
 say "open a new shell, or run:"
 say "  export PATH=\"$shim_dir:\$PATH\""
+if [[ -n "$CODEX_HOME_DIR" ]]; then
+  say "  export CODEX_HOME=\"$CODEX_HOME_DIR\""
+fi
 say "then:"
 say "  codex --version"

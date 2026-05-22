@@ -6,7 +6,6 @@ BUNDLE=""
 SOURCE_DIR=""
 UPDATE_PROFILE=1
 PROFILE_PATH=""
-CODEX_HOME_DIR="${CODEX_HOME:-}"
 
 usage() {
   cat <<'EOF'
@@ -20,9 +19,7 @@ Options:
   --bundle PATH       Install from a codex-cli-offline-bundle-*.tar.gz file.
   --source-dir DIR    Install from an already extracted bundle directory.
   --install-root DIR  Install root. Default: ~/.local/codex-offline
-  --codex-home DIR    Optional CODEX_HOME to write into your profile.
-                      Default Codex home is ~/.codex.
-  --profile PATH      Shell profile to update. Default: ~/.zshrc or ~/.bashrc.
+  --profile PATH      Shell profile to update. Default: ~/.zshrc and ~/.bashrc.
   --no-profile        Do not update a shell profile; print the export instead.
   -h, --help          Show this help.
 
@@ -31,6 +28,7 @@ Typical:
 
 After install:
   source ~/.zshrc
+  # or: source ~/.bashrc
   codex --version
 EOF
 }
@@ -77,30 +75,57 @@ extract_tar() {
   esac
 }
 
-choose_profile() {
+choose_profiles() {
   if [[ -n "$PROFILE_PATH" ]]; then
     printf '%s\n' "$PROFILE_PATH"
     return
   fi
 
-  case "${SHELL:-}" in
-    */zsh) printf '%s\n' "$HOME/.zshrc" ;;
-    */bash) printf '%s\n' "$HOME/.bashrc" ;;
-    *) printf '%s\n' "$HOME/.profile" ;;
-  esac
-}
-
-profile_exports() {
-  printf 'export PATH="%s:$PATH"\n' "$shim_dir"
-  if [[ -n "$CODEX_HOME_DIR" ]]; then
-    printf 'export CODEX_HOME="%s"\n' "$CODEX_HOME_DIR"
-  fi
+  printf '%s\n' "$HOME/.zshrc"
+  printf '%s\n' "$HOME/.bashrc"
 }
 
 find_first() {
   local root="$1"
   local pattern="$2"
   find "$root" -type f -path "$pattern" -print -quit 2>/dev/null || true
+}
+
+update_profile_block() {
+  local profile="$1"
+  local marker_begin="$2"
+  local marker_end="$3"
+  local profile_export="$4"
+  local tmp_profile
+
+  mkdir -p "$(dirname "$profile")"
+  touch "$profile"
+  tmp_profile="$(mktemp)"
+
+  if ! awk -v begin="$marker_begin" -v end="$marker_end" '
+    $0 == begin { in_block = 1; next }
+    $0 == end && in_block { in_block = 0; next }
+    !in_block { print }
+    END { if (in_block) exit 2 }
+  ' "$profile" > "$tmp_profile"; then
+    rm -f "$tmp_profile"
+    die "failed to update profile block in $profile"
+  fi
+
+  {
+    awk '
+      NF {
+        for (i = 1; i <= blanks; i++) print ""
+        blanks = 0
+        print
+        seen = 1
+        next
+      }
+      seen { blanks++ }
+    ' "$tmp_profile"
+    printf '\n%s\n%s\n%s\n' "$marker_begin" "$profile_export" "$marker_end"
+  } > "$profile"
+  rm -f "$tmp_profile"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -118,11 +143,6 @@ while [[ $# -gt 0 ]]; do
     --install-root)
       [[ $# -ge 2 ]] || die "--install-root requires a value"
       INSTALL_ROOT="$2"
-      shift 2
-      ;;
-    --codex-home)
-      [[ $# -ge 2 ]] || die "--codex-home requires a value"
-      CODEX_HOME_DIR="$2"
       shift 2
       ;;
     --profile)
@@ -148,6 +168,8 @@ need_cmd tar
 need_cmd date
 need_cmd find
 need_cmd mkdir
+need_cmd mktemp
+need_cmd awk
 
 tmp_dir=""
 cleanup() {
@@ -260,43 +282,29 @@ chmod +x "$shim"
 
 ln -sfn "$release_dir" "$INSTALL_ROOT/current"
 
-profile_export="$(profile_exports)"
+profile_export="export PATH=\"$shim_dir:\$PATH\""
 if [[ "$UPDATE_PROFILE" -eq 1 ]]; then
-  profile="$(choose_profile)"
   marker_begin="# >>> codex offline install >>>"
   marker_end="# <<< codex offline install <<<"
-  mkdir -p "$(dirname "$profile")"
-  touch "$profile"
-  if grep -Fq "$marker_begin" "$profile"; then
-    say "profile already contains Codex offline install block: $profile"
-  else
-    say "adding PATH entry to $profile"
-    cat >> "$profile" <<EOF
-
-$marker_begin
-$profile_export
-$marker_end
-EOF
-  fi
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] || continue
+    if [[ -f "$profile" ]] && grep -Fq "$marker_begin" "$profile"; then
+      say "updating existing PATH entry in $profile"
+    else
+      say "adding PATH entry to $profile"
+    fi
+    update_profile_block "$profile" "$marker_begin" "$marker_end" "$profile_export"
+  done < <(choose_profiles)
 else
   say "profile update skipped; run this in your shell:"
-  printf '%s\n' "$profile_export" | sed 's/^/[install]   /'
+  say "  $profile_export"
 fi
 
-codex_home="${CODEX_HOME_DIR:-$HOME/.codex}"
-mkdir -p "$codex_home/skills"
-
 say "verifying Codex"
-CODEX_HOME="$codex_home" PATH="$shim_dir:$PATH" "$shim" --version
+PATH="$shim_dir:$PATH" "$shim" --version
 
-say "Codex home: $codex_home"
-say "config file: $codex_home/config.toml"
-say "skills dir: $codex_home/skills/<skill-name>/SKILL.md"
 say "done"
 say "open a new shell, or run:"
 say "  export PATH=\"$shim_dir:\$PATH\""
-if [[ -n "$CODEX_HOME_DIR" ]]; then
-  say "  export CODEX_HOME=\"$CODEX_HOME_DIR\""
-fi
 say "then:"
 say "  codex --version"
